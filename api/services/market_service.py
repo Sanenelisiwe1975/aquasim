@@ -22,6 +22,11 @@ class MarketService:
         raw_list = await self._redis.lrange(f"ticks:{symbol}", 0, n - 1)
         return [json.loads(r) for r in raw_list]
 
+    async def get_position(self, strategy_id: str, symbol: str) -> Optional[dict]:
+        import json
+        raw = await self._redis.get(f"position:{strategy_id}:{symbol}")
+        return json.loads(raw) if raw else None
+
     async def get_positions(self, strategy_id: str) -> List[dict]:
         import json
         keys = await self._redis.keys(f"position:{strategy_id}:*")

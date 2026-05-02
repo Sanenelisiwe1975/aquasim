@@ -15,7 +15,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from api.routers import orderbook, positions, trades, strategies, backtest
+from api.routers import orderbook, orders, positions, trades, strategies, backtest
 from api.websocket.manager import manager
 
 structlog.configure(
@@ -80,6 +80,7 @@ app.add_middleware(
 # ── REST routers ─────────────────────────────────────────────────────────────
 
 app.include_router(orderbook.router, prefix="/api/v1")
+app.include_router(orders.router, prefix="/api/v1")
 app.include_router(positions.router, prefix="/api/v1")
 app.include_router(trades.router, prefix="/api/v1")
 app.include_router(strategies.router, prefix="/api/v1")
