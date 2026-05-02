@@ -24,6 +24,7 @@ class RiskManager:
         self._positions: Dict[str, Dict[str, Position]] = {}   # strategy_id → symbol → Position
         self._peak_equity: Dict[str, float] = {}
         self._daily_pnl: Dict[str, float] = {}
+        self._overrides: Dict[str, dict] = {}   # strategy_id → limit overrides
         self._initial_equity = 1_000_000.0  # $1M starting NAV per strategy
 
     def register_strategy(self, strategy_id: str) -> None:
@@ -37,14 +38,27 @@ class RiskManager:
         self._positions[strategy_id][position.symbol] = position
         self._update_metrics(strategy_id)
 
+    def apply_overrides(self, strategy_id: str, limits: dict) -> None:
+        """Apply runtime per-strategy limit overrides (from API PATCH /risk)."""
+        if strategy_id not in self._overrides:
+            self._overrides[strategy_id] = {}
+        self._overrides[strategy_id].update(limits)
+        log.info("risk_limits_overridden", strategy_id=strategy_id, limits=limits)
+
     def check_order(self, order: Order, current_price: float) -> tuple[bool, str]:
         """
         Returns (approved: bool, reason: str).
         Mutates order.status/rejection_reason on failure.
+        Per-strategy overrides take precedence over global settings.
         """
         strategy_id = order.strategy_id
         if strategy_id not in self._positions:
             self.register_strategy(strategy_id)
+
+        ov = self._overrides.get(strategy_id, {})
+        max_pos_usd = ov.get("max_position_usd", settings.max_position_usd)
+        max_dd_pct = ov.get("max_drawdown_pct", settings.max_drawdown_pct)
+        max_loss_usd = ov.get("max_daily_loss_usd", settings.max_daily_loss_usd)
 
         positions = self._positions[strategy_id]
         pos = positions.get(order.symbol)
@@ -57,24 +71,24 @@ class RiskManager:
             else current_qty - order.quantity
         )
         new_notional = abs(new_qty) * current_price
-        if new_notional > settings.max_position_usd:
+        if new_notional > max_pos_usd:
             reason = (
                 f"Position notional ${new_notional:,.0f} exceeds limit "
-                f"${settings.max_position_usd:,.0f}"
+                f"${max_pos_usd:,.0f}"
             )
             return self._reject(order, reason)
 
         # 2. Drawdown check
         equity = self._calc_equity(strategy_id)
         peak = self._peak_equity.get(strategy_id, equity)
-        if peak > 0 and (peak - equity) / peak > settings.max_drawdown_pct:
-            reason = f"Drawdown {((peak - equity) / peak):.2%} exceeds limit {settings.max_drawdown_pct:.2%}"
+        if peak > 0 and (peak - equity) / peak > max_dd_pct:
+            reason = f"Drawdown {((peak - equity) / peak):.2%} exceeds limit {max_dd_pct:.2%}"
             return self._reject(order, reason)
 
         # 3. Daily loss check
         daily_pnl = self._daily_pnl.get(strategy_id, 0.0)
-        if daily_pnl < -settings.max_daily_loss_usd:
-            reason = f"Daily loss ${abs(daily_pnl):,.0f} exceeds limit ${settings.max_daily_loss_usd:,.0f}"
+        if daily_pnl < -max_loss_usd:
+            reason = f"Daily loss ${abs(daily_pnl):,.0f} exceeds limit ${max_loss_usd:,.0f}"
             return self._reject(order, reason)
 
         return True, "approved"
