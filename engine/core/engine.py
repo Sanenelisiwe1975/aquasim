@@ -26,7 +26,7 @@ from engine.db.models import BacktestRun, TradeRecord, OrderRecord
 from engine.execution import ExecutionSimulator, LatencyConfig
 from engine.kafka import KafkaProducer, KafkaConsumer
 from engine.kafka import topics
-from engine.models import Order, OrderStatus, Tick, Trade
+from engine.models import Order, OrderSide, OrderStatus, OrderType, Tick, Trade
 from engine.orderbook import OrderBook
 from engine.pnl import PnLTracker
 from engine.redis_client import RedisClient
@@ -112,6 +112,7 @@ class AquaSimEngine:
         infra_tasks = [
             asyncio.create_task(self._consumer.run(), name="kafka-consumer"),
             asyncio.create_task(self._exec_sim.run(), name="exec-simulator"),
+            asyncio.create_task(self._listen_commands(), name="cmd-listener"),
         ]
 
         try:
@@ -143,6 +144,71 @@ class AquaSimEngine:
         for task in infra_tasks:
             task.cancel()
         await asyncio.gather(*infra_tasks, return_exceptions=True)
+
+    async def _listen_commands(self) -> None:
+        """Subscribe to engine_commands Redis channel published by the API."""
+        import json
+        import aioredis
+
+        redis = await aioredis.from_url(
+            settings.redis_url, encoding="utf-8", decode_responses=True
+        )
+        pubsub = redis.pubsub()
+        await pubsub.subscribe("engine_commands")
+        log.info("engine_commands_subscribed")
+
+        try:
+            async for message in pubsub.listen():
+                if message["type"] != "message":
+                    continue
+                try:
+                    command = json.loads(message["data"])
+                    await self._dispatch_command(command)
+                except Exception as e:
+                    log.error("command_dispatch_error", error=str(e))
+        finally:
+            await redis.close()
+
+    async def _dispatch_command(self, command: dict) -> None:
+        import json
+        cmd_type = command.get("type")
+
+        if cmd_type == "submit_order":
+            raw = command.get("order", {})
+            try:
+                order = Order(
+                    id=raw["id"],
+                    strategy_id=raw["strategy_id"],
+                    symbol=raw["symbol"],
+                    side=OrderSide(raw["side"]),
+                    quantity=float(raw["quantity"]),
+                    order_type=OrderType(raw.get("order_type", "MARKET")),
+                    limit_price=raw.get("limit_price"),
+                    created_at=datetime.fromisoformat(raw["created_at"]),
+                )
+                await self._on_order(order)
+                log.info("manual_order_received", order_id=order.id, symbol=order.symbol)
+            except (KeyError, ValueError) as e:
+                log.error("submit_order_command_invalid", error=str(e))
+
+        elif cmd_type == "pause_strategy":
+            strategy = self._strategies.get(command.get("strategy_id", ""))
+            if strategy:
+                await strategy.pause()
+
+        elif cmd_type == "resume_strategy":
+            strategy = self._strategies.get(command.get("strategy_id", ""))
+            if strategy:
+                await strategy.resume()
+
+        elif cmd_type == "update_risk":
+            strategy_id = command.get("strategy_id", "")
+            limits = command.get("limits", {})
+            if strategy_id and limits:
+                self._risk.apply_overrides(strategy_id, limits)
+
+        else:
+            log.warning("unknown_command_type", cmd_type=cmd_type)
 
     async def _finalize_backtest_runs(
         self,
