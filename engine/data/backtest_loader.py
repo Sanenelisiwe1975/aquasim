@@ -6,13 +6,16 @@ configurable speed (backtest_speed_multiplier × real-time).
 
 CSV format expected:
   timestamp,symbol,price,bid,ask,bid_size,ask_size,volume
+
+run() returns (first_tick_ts, last_tick_ts) so the caller can persist a
+BacktestRun record with the correct time window.
 """
 from __future__ import annotations
 import asyncio
 import csv
 from datetime import datetime
 from pathlib import Path
-from typing import List
+from typing import List, Optional, Tuple
 
 import structlog
 
@@ -37,16 +40,19 @@ class BacktestLoader:
         self._redis = redis
         self._books = order_books
 
-    async def run(self, filepath: str | None = None) -> None:
+    async def run(
+        self, filepath: str | None = None
+    ) -> Tuple[Optional[datetime], Optional[datetime]]:
+        """Replay the CSV and return (first_tick_ts, last_tick_ts)."""
         path = Path(filepath or settings.backtest_file)
         if not path.exists():
             log.error("backtest_file_not_found", path=str(path))
-            return
+            return None, None
 
         ticks = self._load_csv(path)
         if not ticks:
             log.error("no_ticks_loaded")
-            return
+            return None, None
 
         log.info("backtest_replay_starting", ticks=len(ticks), file=str(path),
                  speed=settings.backtest_speed_multiplier)
@@ -75,7 +81,11 @@ class BacktestLoader:
 
             prev_ts = tick.timestamp
 
-        log.info("backtest_replay_complete", ticks=sequence)
+        first_ts = ticks[0].timestamp
+        last_ts = ticks[-1].timestamp
+        log.info("backtest_replay_complete", ticks=sequence,
+                 first_ts=first_ts.isoformat(), last_ts=last_ts.isoformat())
+        return first_ts, last_ts
 
     @staticmethod
     def _load_csv(path: Path) -> List[Tick]:
