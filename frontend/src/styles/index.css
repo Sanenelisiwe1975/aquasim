@@ -43,6 +43,21 @@ body {
   scrollbar-color: var(--color-border) transparent;
 }
 
+/* Dashboard layout */
+.dashboard { min-height: 100vh; background: var(--color-bg); padding: 16px; }
+.dashboard-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.dashboard-title-group { display: flex; align-items: center; gap: 12px; }
+.dashboard-title { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
+.dashboard-subtitle { font-size: 11px; color: var(--color-muted); background: #21262d; padding: 2px 8px; border-radius: 12px; }
+.dashboard-ws-indicator { display: flex; align-items: center; gap: 8px; }
+.ws-dot { width: 8px; height: 8px; border-radius: 50%; }
+.ws-label { font-size: 11px; color: var(--color-muted); }
+.symbol-bar { display: flex; gap: 8px; margin-bottom: 16px; }
+.symbol-btn { padding: 4px 14px; border-radius: 6px; border: 1px solid var(--color-border); cursor: pointer; font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 12px; }
+.grid-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.grid-chart-row { display: grid; grid-template-columns: 1fr 280px; gap: 12px; margin-bottom: 12px; }
+.section { margin-bottom: 12px; }
+
 /* Recharts tooltip override */
 .recharts-tooltip-wrapper .recharts-default-tooltip {
   background: var(--color-surface) !important;
