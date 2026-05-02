@@ -10,17 +10,19 @@ Orchestrates all components:
 """
 from __future__ import annotations
 import asyncio
+import uuid
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import structlog
 
+from engine.backtest import compute_backtest_metrics
 from engine.core.config import settings
 from engine.core.event_bus import bus, EVT_TICK, EVT_TRADE, EVT_ORDER_NEW, EVT_POSITION_UPDATE
 from engine.data.simulator import MarketDataSimulator
 from engine.data.backtest_loader import BacktestLoader
 from engine.db import init_db, get_session
-from engine.db.models import TradeRecord, OrderRecord
+from engine.db.models import BacktestRun, TradeRecord, OrderRecord
 from engine.execution import ExecutionSimulator, LatencyConfig
 from engine.kafka import KafkaProducer, KafkaConsumer
 from engine.kafka import topics
@@ -104,27 +106,93 @@ class AquaSimEngine:
             await self._redis.register_strategy(strategy.strategy_id)
             self._risk.register_strategy(strategy.strategy_id)
 
-        # Assemble concurrent tasks
-        tasks = [
+        log.info("aquasim_engine_running", strategies=list(self._strategies.keys()), mode=settings.mode)
+
+        # Infrastructure tasks run in both modes
+        infra_tasks = [
             asyncio.create_task(self._consumer.run(), name="kafka-consumer"),
             asyncio.create_task(self._exec_sim.run(), name="exec-simulator"),
         ]
 
-        if settings.mode == "live":
-            market_sim = MarketDataSimulator(SYMBOLS, self._producer, self._redis, self._books)
-            tasks.append(asyncio.create_task(market_sim.run(), name="market-data-sim"))
-        else:
-            loader = BacktestLoader(self._producer, self._redis, self._books)
-            tasks.append(asyncio.create_task(loader.run(), name="backtest-loader"))
-
-        log.info("aquasim_engine_running", strategies=list(self._strategies.keys()), mode=settings.mode)
-
         try:
-            await asyncio.gather(*tasks)
+            if settings.mode == "live":
+                market_sim = MarketDataSimulator(SYMBOLS, self._producer, self._redis, self._books)
+                infra_tasks.append(asyncio.create_task(market_sim.run(), name="market-data-sim"))
+                await asyncio.gather(*infra_tasks)
+            else:
+                await self._run_backtest(infra_tasks)
         except asyncio.CancelledError:
             log.info("engine_shutdown_requested")
         finally:
             await self._shutdown()
+
+    async def _run_backtest(self, infra_tasks: list) -> None:
+        """Run backtest replay, persist results, then cancel infrastructure."""
+        run_id_prefix = str(uuid.uuid4())
+        loader = BacktestLoader(self._producer, self._redis, self._books)
+
+        # Replay ticks to completion; infra tasks consume concurrently
+        first_ts, last_ts = await loader.run()
+
+        # Allow exec simulator to drain any in-flight orders
+        await asyncio.sleep(2.0)
+
+        if first_ts and last_ts:
+            await self._finalize_backtest_runs(run_id_prefix, first_ts, last_ts)
+
+        for task in infra_tasks:
+            task.cancel()
+        await asyncio.gather(*infra_tasks, return_exceptions=True)
+
+    async def _finalize_backtest_runs(
+        self,
+        run_id_prefix: str,
+        start_time: datetime,
+        end_time: datetime,
+    ) -> None:
+        """Create a BacktestRun record per strategy with computed metrics."""
+        from sqlalchemy import select, func
+
+        for strategy_id in self._strategies:
+            equity = self._pnl.equity_curve(strategy_id)
+            metrics = compute_backtest_metrics(equity)
+
+            try:
+                async with get_session() as session:
+                    result = await session.execute(
+                        select(func.count(TradeRecord.id)).where(
+                            TradeRecord.strategy_id == strategy_id,
+                            TradeRecord.timestamp >= start_time,
+                            TradeRecord.timestamp <= end_time,
+                        )
+                    )
+                    trade_count = result.scalar() or 0
+
+                    run = BacktestRun(
+                        id=f"{run_id_prefix}_{strategy_id}",
+                        strategy_id=strategy_id,
+                        symbol=",".join(SYMBOLS),
+                        start_time=start_time,
+                        end_time=end_time,
+                        total_trades=trade_count,
+                        realized_pnl=metrics["realized_pnl"],
+                        max_drawdown=metrics["max_drawdown"],
+                        sharpe_ratio=metrics["sharpe_ratio"],
+                        win_rate=metrics["win_rate"],
+                        completed=True,
+                    )
+                    session.add(run)
+                    log.info(
+                        "backtest_run_saved",
+                        strategy_id=strategy_id,
+                        trades=trade_count,
+                        realized_pnl=round(metrics["realized_pnl"], 2),
+                        sharpe=metrics["sharpe_ratio"],
+                        win_rate=metrics["win_rate"],
+                        max_drawdown=round(metrics["max_drawdown"], 2),
+                    )
+            except Exception as e:
+                log.error("backtest_run_persist_failed", strategy_id=strategy_id, error=str(e))
 
     async def _shutdown(self) -> None:
         for strategy in self._strategies.values():
