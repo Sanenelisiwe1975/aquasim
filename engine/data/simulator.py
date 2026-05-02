@@ -123,3 +123,7 @@ class MarketDataSimulator:
 
             # Publish book snapshot to Kafka
             await self._producer.send(ORDERBOOK_UPDATES, book.to_dict(), key=tick.symbol)
+
+            # Publish to Redis pub/sub so the API WebSocket can push live updates
+            await self._redis.publish(f"orderbook:{tick.symbol}", book.to_dict())
+            await self._redis.publish(f"ticks:{tick.symbol}", tick_dict)
