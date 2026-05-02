@@ -1,0 +1,12 @@
+aiokafka==0.10.0
+aioredis==2.0.1
+asyncpg==0.29.0
+sqlalchemy[asyncio]==2.0.29
+alembic==1.13.1
+pydantic==2.6.4
+pydantic-settings==2.2.1
+numpy==1.26.4
+uvloop==0.19.0
+structlog==24.1.0
+msgpack==1.0.8
+python-dotenv==1.0.1
