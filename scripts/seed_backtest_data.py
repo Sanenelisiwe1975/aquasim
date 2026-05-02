@@ -41,24 +41,39 @@ def generate(symbol: str, rows: int, start_price: float = 100.0) -> list:
     return records
 
 
+SYMBOLS = {
+    "AAPL": 182.0,
+    "MSFT": 374.0,
+    "GOOGL": 140.0,
+}
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--rows", type=int, default=50_000)
-    parser.add_argument("--symbol", type=str, default="AAPL")
+    parser.add_argument("--rows", type=int, default=20_000,
+                        help="Rows per symbol (default 20000 → ~60k total)")
+    parser.add_argument("--out", type=str, default="data/backtest_data.csv")
     args = parser.parse_args()
 
-    out = Path("engine/data/backtest_data.csv")
+    out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
 
-    records = generate(args.symbol, args.rows)
-    fieldnames = ["timestamp", "symbol", "price", "bid", "ask", "bid_size", "ask_size", "volume"]
+    all_records: list = []
+    for symbol, start_price in SYMBOLS.items():
+        records = generate(symbol, args.rows, start_price=start_price)
+        all_records.extend(records)
+        print(f"  {symbol}: {len(records)} rows (start ${start_price})")
 
+    # Interleave by timestamp so the replayer sees a realistic mixed stream
+    all_records.sort(key=lambda r: r["timestamp"])
+
+    fieldnames = ["timestamp", "symbol", "price", "bid", "ask", "bid_size", "ask_size", "volume"]
     with open(out, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
-        writer.writerows(records)
+        writer.writerows(all_records)
 
-    print(f"Written {len(records)} rows to {out}")
+    print(f"Written {len(all_records)} rows to {out}")
 
 
 if __name__ == "__main__":
