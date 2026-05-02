@@ -32,6 +32,7 @@ class BaseStrategy(abc.ABC):
         self.symbols = symbols
         self._submit_order = order_callback
         self._running = False
+        self._paused = False
         self.log = structlog.get_logger(strategy_id)
 
     # ── Lifecycle ────────────────────────────────────────────────────────────
@@ -45,6 +46,14 @@ class BaseStrategy(abc.ABC):
         self._running = False
         await self.on_stop()
         self.log.info("strategy_stopped")
+
+    async def pause(self) -> None:
+        self._paused = True
+        self.log.info("strategy_paused")
+
+    async def resume(self) -> None:
+        self._paused = False
+        self.log.info("strategy_resumed")
 
     # ── Hook methods (override in subclass) ─────────────────────────────────
 
@@ -94,7 +103,7 @@ class BaseStrategy(abc.ABC):
         order_type: OrderType,
         limit_price: Optional[float],
     ) -> Optional[Order]:
-        if not self._running:
+        if not self._running or self._paused:
             return None
         order = Order(
             strategy_id=self.strategy_id,
