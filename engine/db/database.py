@@ -31,8 +31,15 @@ _engine = create_async_engine(
 
 _SessionFactory = async_sessionmaker(_engine, expire_on_commit=False)
 
-# Path to alembic.ini, migrations/ lives next to the engine/ package
-_ALEMBIC_INI = Path(__file__).parent.parent.parent / "migrations" / "alembic.ini"
+import os
+
+# MIGRATIONS_DIR env var lets the container override the default relative path.
+# Default (local dev): project-root/migrations — three levels up from engine/db/.
+# Docker: set MIGRATIONS_DIR=/app/migrations, since engine code lands at /app/.
+_MIGRATIONS_DIR = Path(
+    os.getenv("MIGRATIONS_DIR", str(Path(__file__).parent.parent.parent / "migrations"))
+)
+_ALEMBIC_INI = _MIGRATIONS_DIR / "alembic.ini"
 
 
 async def init_db() -> None:
