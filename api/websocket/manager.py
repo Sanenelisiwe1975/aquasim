@@ -28,7 +28,7 @@ log = structlog.get_logger(__name__)
 _CHANNELS = ["trades", "risk_events"]
 
 # Redis pub/sub patterns — matches any channel with these prefixes
-_PATTERNS = ["positions:*", "orderbook:*", "ticks:*"]
+_PATTERNS = ["positions:*", "orderbook:*", "ticks:*", "risk:*"]
 
 
 class ConnectionManager:
