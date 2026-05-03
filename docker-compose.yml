@@ -93,6 +93,14 @@ services:
       - DATABASE_URL=postgresql+asyncpg://aquasim:aquasim_secret@postgres:5432/aquasim
       - MODE=${MODE:-live}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # Tell init_db() where to find alembic.ini inside the container
+      - MIGRATIONS_DIR=/app/migrations
+    volumes:
+      # Backtest CSV — required when MODE=backtest
+      - ./data:/app/data:ro
+      # Alembic migration scripts — kept outside the engine image so schema
+      # changes don't require rebuilding the container
+      - ./migrations:/app/migrations:ro
     networks:
       - aquasim-net
     restart: unless-stopped
