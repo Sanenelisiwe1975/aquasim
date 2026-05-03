@@ -391,6 +391,7 @@ class AquaSimEngine:
         if order:
             persist_tasks.append(self._persist_order(order))
 
+        risk_summary = self._risk.get_risk_summary(trade.strategy_id)
         await asyncio.gather(
             *persist_tasks,
             self._redis.set_position(trade.strategy_id, trade.symbol, pos.to_dict()),
@@ -398,13 +399,12 @@ class AquaSimEngine:
                 "total_realized": pos.realized_pnl,
                 "total_unrealized": pos.unrealized_pnl,
             }),
-            self._redis.set_risk(
-                trade.strategy_id,
-                self._risk.get_risk_summary(trade.strategy_id),
-            ),
+            self._redis.set_risk(trade.strategy_id, risk_summary),
             self._producer.send(topics.TRADES, trade.to_dict(), key=trade.strategy_id),
             self._redis.publish("trades", trade.to_dict()),
             self._redis.publish(f"positions:{trade.strategy_id}", pos.to_dict()),
+            # Publish risk state so the dashboard updates live
+            self._redis.publish(f"risk:{trade.strategy_id}", risk_summary),
         )
 
         log.info(
