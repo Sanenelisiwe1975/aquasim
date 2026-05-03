@@ -69,6 +69,7 @@ export interface RiskSummary {
 export interface EquityPoint {
   timestamp: string;
   total_pnl: number;
+  realized?: number;
 }
 
 export interface WsMessage {

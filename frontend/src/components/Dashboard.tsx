@@ -108,7 +108,11 @@ export const Dashboard: React.FC = () => {
         return [pos, ...prev];
       });
       const sid = pos.strategy_id;
-      const point: EquityPoint = { timestamp: pos.last_updated, total_pnl: pos.total_pnl };
+      const point: EquityPoint = {
+        timestamp: pos.last_updated,
+        total_pnl: pos.total_pnl,
+        realized:  pos.realized_pnl,
+      };
       setEquityCurves((prev) => ({ ...prev, [sid]: [...(prev[sid] ?? []), point].slice(-500) }));
     }
 
