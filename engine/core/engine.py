@@ -63,6 +63,8 @@ class AquaSimEngine:
 
         self._strategies: Dict[str, BaseStrategy] = {}
         self._active_orders: Dict[str, Order] = {}
+        # throttle equity-curve Redis pushes to 1/sec per strategy
+        self._last_equity_push: Dict[str, Optional[datetime]] = {}
 
     # ── Public lifecycle ─────────────────────────────────────────────────────
 
@@ -297,17 +299,26 @@ class AquaSimEngine:
 
         # Mark all open positions to market
         updated_positions = self._pnl.mark_to_market(tick)
+
+        # Group by strategy so we can do one equity push per strategy
+        by_strategy: Dict[str, List] = {}
         for pos in updated_positions:
             self._risk.update_position(pos.strategy_id, pos)
             await self._redis.set_position(pos.strategy_id, pos.symbol, pos.to_dict())
-            await self._redis.push_equity_point(pos.strategy_id, {
-                "timestamp": tick.timestamp.isoformat(),
-                "total_pnl": round(pos.total_pnl, 4),
-            })
-            await self._redis.publish(
-                f"positions:{pos.strategy_id}",
-                pos.to_dict(),
-            )
+            await self._redis.publish(f"positions:{pos.strategy_id}", pos.to_dict())
+            by_strategy.setdefault(pos.strategy_id, []).append(pos)
+
+        # Push one equity point per strategy, throttled to 1/sec, summed across symbols
+        for strategy_id, positions in by_strategy.items():
+            last_push = self._last_equity_push.get(strategy_id)
+            elapsed = (tick.timestamp - last_push).total_seconds() if last_push else None
+            if elapsed is None or elapsed >= 1.0:
+                total_pnl = round(sum(p.total_pnl for p in positions), 4)
+                await self._redis.push_equity_point(strategy_id, {
+                    "timestamp": tick.timestamp.isoformat(),
+                    "total_pnl": total_pnl,
+                })
+                self._last_equity_push[strategy_id] = tick.timestamp
 
         # Dispatch tick to strategies concurrently
         await asyncio.gather(
@@ -358,8 +369,13 @@ class AquaSimEngine:
         self._risk.record_trade_pnl(trade.strategy_id, pos.realized_pnl)
 
         # Persist to Postgres and sync to Redis
+        # _persist_order upserts the order record with FILLED status + fill details
+        persist_tasks = [self._persist_trade(trade)]
+        if order:
+            persist_tasks.append(self._persist_order(order))
+
         await asyncio.gather(
-            self._persist_trade(trade),
+            *persist_tasks,
             self._redis.set_position(trade.strategy_id, trade.symbol, pos.to_dict()),
             self._redis.set_pnl(trade.strategy_id, {
                 "total_realized": pos.realized_pnl,
