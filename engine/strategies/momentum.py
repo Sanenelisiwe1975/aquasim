@@ -46,22 +46,20 @@ class MomentumStrategy(BaseStrategy):
         current_pos = self._position[tick.symbol]
 
         if short_ema > long_ema and current_pos <= 0:
-            # Golden cross — go long
-            if current_pos < 0:
-                await self.buy(tick.symbol, self.trade_qty)  # close short
-            await self.buy(tick.symbol, self.trade_qty)
+            # Golden cross — go long (double qty if reversing from short to net-long in one order)
+            qty = self.trade_qty * (2 if current_pos < 0 else 1)
+            await self.buy(tick.symbol, qty)
             self._position[tick.symbol] = 1.0
             self.log.info("momentum_signal", signal="BUY", symbol=tick.symbol,
-                          short_ema=round(short_ema, 4), long_ema=round(long_ema, 4))
+                          qty=qty, short_ema=round(short_ema, 4), long_ema=round(long_ema, 4))
 
         elif short_ema < long_ema and current_pos >= 0:
-            # Death cross — go short
-            if current_pos > 0:
-                await self.sell(tick.symbol, self.trade_qty)  # close long
-            await self.sell(tick.symbol, self.trade_qty)
+            # Death cross — go short (double qty if reversing from long to net-short in one order)
+            qty = self.trade_qty * (2 if current_pos > 0 else 1)
+            await self.sell(tick.symbol, qty)
             self._position[tick.symbol] = -1.0
             self.log.info("momentum_signal", signal="SELL", symbol=tick.symbol,
-                          short_ema=round(short_ema, 4), long_ema=round(long_ema, 4))
+                          qty=qty, short_ema=round(short_ema, 4), long_ema=round(long_ema, 4))
 
     async def on_fill(self, order) -> None:
         self.log.info("fill", order_id=order.id, side=order.side.value,
