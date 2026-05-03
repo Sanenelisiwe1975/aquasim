@@ -1,6 +1,7 @@
 import React from 'react';
 import {
-  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
+  AreaChart, Area, Line, LineChart, ComposedChart,
+  XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Legend,
 } from 'recharts';
 import { EquityPoint } from '../types';
 
@@ -15,31 +16,33 @@ const fmt = (v: number) =>
 export const PnLChart: React.FC<Props> = ({ strategyId, data }) => {
   const latest = data[data.length - 1];
   const isPositive = (latest?.total_pnl ?? 0) >= 0;
+  const hasRealized = data.some((d) => d.realized !== undefined);
 
   const chartData = data.map((d) => ({
-    time: new Date(d.timestamp).toLocaleTimeString(),
-    pnl: d.total_pnl,
+    time:     new Date(d.timestamp).toLocaleTimeString(),
+    total:    d.total_pnl,
+    realized: d.realized,
   }));
 
+  const strokeTotal    = isPositive ? '#3fb950' : '#f85149';
+  const gradientId     = `grad-${strategyId}`;
+
   return (
-    <div className="card" style={{ height: 220 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-        <span style={{ fontWeight: 600 }}>{strategyId} — PnL</span>
+    <div className="card h-220">
+      <div className="panel-header mb-8">
+        <span className="panel-title">{strategyId} — PnL</span>
         {latest && (
-          <span
-            className="mono"
-            style={{ fontWeight: 700, color: isPositive ? 'var(--color-green)' : 'var(--color-red)' }}
-          >
+          <span className={`mono fw-700 ${isPositive ? 'badge-green' : 'badge-red'}`}>
             {fmt(latest.total_pnl)}
           </span>
         )}
       </div>
       <ResponsiveContainer width="100%" height="85%">
-        <AreaChart data={chartData}>
+        <ComposedChart data={chartData}>
           <defs>
-            <linearGradient id={`grad-${strategyId}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor={isPositive ? '#3fb950' : '#f85149'} stopOpacity={0.3} />
-              <stop offset="95%" stopColor={isPositive ? '#3fb950' : '#f85149'} stopOpacity={0} />
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%"  stopColor={strokeTotal} stopOpacity={0.25} />
+              <stop offset="95%" stopColor={strokeTotal} stopOpacity={0}    />
             </linearGradient>
           </defs>
           <XAxis dataKey="time" tick={{ fill: '#8b949e', fontSize: 10 }} interval="preserveStartEnd" />
@@ -50,18 +53,32 @@ export const PnLChart: React.FC<Props> = ({ strategyId, data }) => {
           />
           <Tooltip
             contentStyle={{ background: '#161b22', border: '1px solid #30363d', borderRadius: 6 }}
-            formatter={(v: number) => [fmt(v), 'PnL']}
+            formatter={(v: number, name: string) => [fmt(v), name === 'total' ? 'Total PnL' : 'Realized']}
           />
           <ReferenceLine y={0} stroke="#30363d" strokeDasharray="4 4" />
+          {/* Filled area for total PnL */}
           <Area
             type="monotone"
-            dataKey="pnl"
-            stroke={isPositive ? '#3fb950' : '#f85149'}
-            fill={`url(#grad-${strategyId})`}
+            dataKey="total"
+            stroke={strokeTotal}
+            fill={`url(#${gradientId})`}
             dot={false}
             strokeWidth={1.5}
+            isAnimationActive={false}
           />
-        </AreaChart>
+          {/* Dashed realized PnL line — only when data is available */}
+          {hasRealized && (
+            <Line
+              type="monotone"
+              dataKey="realized"
+              stroke="#58a6ff"
+              dot={false}
+              strokeWidth={1}
+              strokeDasharray="4 2"
+              isAnimationActive={false}
+            />
+          )}
+        </ComposedChart>
       </ResponsiveContainer>
     </div>
   );
