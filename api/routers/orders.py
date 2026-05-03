@@ -45,14 +45,15 @@ def _serialize_order(r) -> dict:
 @router.get("/")
 async def list_orders(
     strategy_id: Optional[str] = Query(None),
-    symbol: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
-    limit: int = Query(100, le=1000),
-    db: AsyncSession = Depends(get_db),
+    symbol:      Optional[str] = Query(None),
+    status:      Optional[str] = Query(None),
+    limit:       int           = Query(100, le=1000),
+    offset:      int           = Query(0, ge=0),
+    db:          AsyncSession  = Depends(get_db),
 ):
     from engine.db.models import OrderRecord
 
-    stmt = select(OrderRecord).order_by(desc(OrderRecord.created_at)).limit(limit)
+    stmt = select(OrderRecord).order_by(desc(OrderRecord.created_at)).offset(offset).limit(limit)
     if strategy_id:
         stmt = stmt.where(OrderRecord.strategy_id == strategy_id)
     if symbol:

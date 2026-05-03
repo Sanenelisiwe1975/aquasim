@@ -14,6 +14,7 @@ class Trade:
     timestamp: datetime
     latency_us: int    # simulated fill latency in microseconds
     slippage: float    # price impact beyond quoted mid
+    realized_pnl: float = 0.0   # PnL booked by this fill (0 if position is being opened)
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
     @property
@@ -33,4 +34,5 @@ class Trade:
             "timestamp": self.timestamp.isoformat(),
             "latency_us": self.latency_us,
             "slippage": self.slippage,
+            "realized_pnl": self.realized_pnl,
         }
