@@ -78,6 +78,8 @@ body {
 .mb-8  { margin-bottom: 8px; }
 .mb-10 { margin-bottom: 10px; }
 
+.max-h-280 { max-height: 280px; }
+
 /* Trade log */
 .trade-table { width: 100%; border-collapse: collapse; font-size: 11px; }
 .trade-table td { padding: 3px 6px; }
