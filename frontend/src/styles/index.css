@@ -74,9 +74,26 @@ body {
 .filter-input::placeholder { color: var(--color-muted); }
 .filter-input:focus { border-color: var(--color-blue); }
 
-.text-xs { font-size: 10px; }
-.mb-8  { margin-bottom: 8px; }
-.mb-10 { margin-bottom: 10px; }
+.text-xs  { font-size: 10px; }
+.text-15  { font-size: 15px; }
+.fw-700   { font-weight: 700; }
+.mb-8     { margin-bottom: 8px; }
+.mb-10    { margin-bottom: 10px; }
+.h-220    { height: 220px; }
+.h-260    { height: 260px; }
+.h-340    { height: 340px; }
+
+/* Order book */
+.ob-header     { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.ob-subtitle   { font-size: 11px; }
+.ob-col-header { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 10px; color: var(--color-muted); margin-bottom: 4px; }
+.ob-scroll     { overflow-y: auto; max-height: 110px; }
+.ob-mid        { text-align: center; padding: 6px 0; font-weight: 700; color: var(--color-blue); font-family: 'JetBrains Mono', monospace; }
+.ob-row        { position: relative; margin-bottom: 1px; }
+.ob-bar        { position: absolute; top: 0; bottom: 0; width: var(--bar-w, 0%); }
+.ob-bar-ask    { right: 0; background: rgba(248, 81, 73, 0.15); }
+.ob-bar-bid    { left: 0; background: rgba(63, 185, 80, 0.15); }
+.ob-content    { display: grid; grid-template-columns: 1fr 1fr; position: relative; padding: 1px 4px; }
 
 .max-h-280 { max-height: 280px; }
 
