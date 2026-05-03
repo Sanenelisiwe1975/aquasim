@@ -102,11 +102,14 @@ class AquaSimEngine:
         # Wire Kafka consumer → strategy dispatch
         self._consumer.register(topics.MARKET_TICKS, self._dispatch_tick)
 
-        # Start all strategies
+        # Start all strategies and restore saved risk state
         for strategy in self._strategies.values():
             await strategy.start()
             await self._redis.register_strategy(strategy.strategy_id)
             self._risk.register_strategy(strategy.strategy_id)
+            saved_risk = await self._redis.get_risk(strategy.strategy_id)
+            if saved_risk:
+                self._risk.restore_state(strategy.strategy_id, saved_risk)
 
         log.info("aquasim_engine_running", strategies=list(self._strategies.keys()), mode=settings.mode)
 
@@ -281,20 +284,9 @@ class AquaSimEngine:
     async def _dispatch_tick(self, tick_dict: dict) -> None:
         """Deserialise a Kafka tick message and fan-out to all strategies."""
         try:
-            from engine.models import Tick
-            tick = Tick(
-                symbol=tick_dict["symbol"],
-                price=tick_dict["price"],
-                bid=tick_dict["bid"],
-                ask=tick_dict["ask"],
-                bid_size=tick_dict["bid_size"],
-                ask_size=tick_dict["ask_size"],
-                volume=tick_dict["volume"],
-                timestamp=datetime.fromisoformat(tick_dict["timestamp"]),
-                sequence=tick_dict.get("sequence", 0),
-            )
+            tick = Tick.from_dict(tick_dict)
         except (KeyError, ValueError) as e:
-            log.error("bad_tick_message", error=str(e))
+            log.error("bad_tick_message", error=str(e), keys=list(tick_dict.keys()))
             return
 
         # Mark all open positions to market
