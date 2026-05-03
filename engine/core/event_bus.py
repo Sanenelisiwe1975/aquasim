@@ -13,7 +13,7 @@ log = structlog.get_logger(__name__)
 
 class EventBus:
     def __init__(self) -> None:
-        # event_type → list of async handler coroutines
+        # event_type,list of async handler coroutines
         self._handlers: Dict[str, List[Callable[..., Coroutine]]] = defaultdict(list)
 
     def subscribe(self, event_type: str, handler: Callable[..., Coroutine]) -> None:

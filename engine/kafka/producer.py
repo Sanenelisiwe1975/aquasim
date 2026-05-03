@@ -23,7 +23,7 @@ class KafkaProducer:
             bootstrap_servers=settings.kafka_bootstrap_servers,
             value_serializer=lambda v: json.dumps(v).encode(),
             compression_type="gzip",
-            # Tuned for low latency — ack from leader only, no lingering
+            # Tuned for low latency ,ack from leader only, no lingering
             acks=1,
             linger_ms=0,
             request_timeout_ms=5_000,

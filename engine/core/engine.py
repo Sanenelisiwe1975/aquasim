@@ -55,6 +55,7 @@ class AquaSimEngine:
         self._exec_sim = ExecutionSimulator(
             order_books=self._books,
             trade_callback=self._on_trade,
+            cancel_callback=self._on_order_cancelled,
             latency_config=LatencyConfig(
                 base_us=settings.base_latency_us,
                 jitter_us=settings.latency_jitter_us,
@@ -312,11 +313,26 @@ class AquaSimEngine:
                 })
                 self._last_equity_push[strategy_id] = tick.timestamp
 
+        # Re-check queued limit orders now that the book has been updated
+        await self._exec_sim.try_fill_pending(tick.symbol)
+
         # Dispatch tick to strategies concurrently
         await asyncio.gather(
             *[s.on_tick(tick) for s in self._strategies.values()],
             return_exceptions=True,
         )
+
+    async def _on_order_cancelled(self, order: Order) -> None:
+        """Called by ExecutionSimulator when a queued limit order expires."""
+        strategy = self._strategies.get(order.strategy_id)
+        if strategy:
+            await strategy.on_reject(order)
+        await self._persist_order(order)
+        await self._redis.publish("risk_events", {
+            "type": "limit_order_expired",
+            "order": order.to_dict(),
+            "reason": order.rejection_reason,
+        })
 
     async def _on_order(self, order: Order) -> None:
         """Called by strategies when they want to place an order."""

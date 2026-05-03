@@ -31,7 +31,7 @@ _engine = create_async_engine(
 
 _SessionFactory = async_sessionmaker(_engine, expire_on_commit=False)
 
-# Path to alembic.ini — migrations/ lives next to the engine/ package
+# Path to alembic.ini, migrations/ lives next to the engine/ package
 _ALEMBIC_INI = Path(__file__).parent.parent.parent / "migrations" / "alembic.ini"
 
 

@@ -28,7 +28,7 @@ class KafkaConsumer:
         self._group_id = group_id
         self._auto_offset_reset = auto_offset_reset
         self._consumer: AIOKafkaConsumer | None = None
-        # topic → list of async handlers
+        # topic,list of async handlers
         self._handlers: Dict[str, List[Handler]] = {t: [] for t in topics}
 
     def register(self, topic: str, handler: Handler) -> None:
@@ -45,7 +45,7 @@ class KafkaConsumer:
             auto_offset_reset=self._auto_offset_reset,
             enable_auto_commit=True,
             auto_commit_interval_ms=1_000,
-            fetch_max_wait_ms=10,    # low-latency polling
+            fetch_max_wait_ms=10,    # low latency polling
             fetch_min_bytes=1,
         )
         await self._consumer.start()

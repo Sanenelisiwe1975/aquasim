@@ -77,7 +77,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── REST routers ─────────────────────────────────────────────────────────────
 
 app.include_router(orderbook.router, prefix="/api/v1")
 app.include_router(orders.router, prefix="/api/v1")
@@ -91,8 +90,6 @@ app.include_router(backtest.router, prefix="/api/v1")
 async def health():
     return {"status": "ok"}
 
-
-# ── WebSocket ─────────────────────────────────────────────────────────────────
 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
