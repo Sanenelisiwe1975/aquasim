@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useLayoutEffect, useRef } from 'react';
 import { RiskSummary } from '../types';
 
 interface Props {
@@ -6,63 +6,97 @@ interface Props {
   strategyId: string;
 }
 
-const Stat: React.FC<{ label: string; value: string; color?: string }> = ({ label, value, color }) => (
-  <div style={{ padding: '8px 12px', background: '#0d1117', borderRadius: 6 }}>
-    <div style={{ color: 'var(--color-muted)', fontSize: 10, marginBottom: 2 }}>{label}</div>
-    <div className="mono" style={{ fontWeight: 600, color: color ?? 'var(--color-text)' }}>{value}</div>
+function utilPct(value: number, limit: number): number {
+  return Math.min((value / limit) * 100, 100);
+}
+
+function barColorClass(pct: number): string {
+  if (pct >= 80) return 'bar-red';
+  if (pct >= 50) return 'bar-yellow';
+  return 'bar-green';
+}
+
+function barTextClass(pct: number): string {
+  if (pct >= 80) return 'badge-red';
+  if (pct >= 50) return 'badge-yellow';
+  return 'badge-green';
+}
+
+interface StatProps { label: string; value: string; colorClass?: string }
+const Stat: React.FC<StatProps> = ({ label, value, colorClass }) => (
+  <div className="risk-stat">
+    <div className="risk-stat-label">{label}</div>
+    <div className={`risk-stat-value${colorClass ? ` ${colorClass}` : ''}`}>{value}</div>
   </div>
 );
+
+interface BarProps { label: string; pct: number; detail: string }
+const Bar: React.FC<BarProps> = ({ label, pct, detail }) => {
+  const fillRef = useRef<HTMLDivElement>(null);
+
+  // Set CSS custom property imperatively to avoid the inline-style linter rule
+  useLayoutEffect(() => {
+    fillRef.current?.style.setProperty('--fill-w', `${pct}%`);
+  }, [pct]);
+
+  return (
+    <div>
+      <div className="risk-bar-row">
+        <span>{label}</span>
+        <span className={barTextClass(pct)}>{detail}</span>
+      </div>
+      <div className="risk-bar-track">
+        <div ref={fillRef} className={`risk-bar-fill ${barColorClass(pct)}`} />
+      </div>
+    </div>
+  );
+};
 
 export const RiskMetrics: React.FC<Props> = ({ risk, strategyId }) => {
   if (!risk) {
     return (
       <div className="card">
-        <div style={{ fontWeight: 600, marginBottom: 8 }}>{strategyId} — Risk</div>
-        <span style={{ color: 'var(--color-muted)' }}>No risk data yet</span>
+        <div className="panel-title mb-8">{strategyId} — Risk</div>
+        <span className="badge-muted">No risk data yet</span>
       </div>
     );
   }
 
-  const ddColor = risk.drawdown_pct > risk.max_drawdown_pct * 0.8
-    ? 'var(--color-red)'
-    : risk.drawdown_pct > risk.max_drawdown_pct * 0.5
-    ? 'var(--color-yellow)'
-    : 'var(--color-green)';
+  const ddPct    = utilPct(risk.drawdown_pct, risk.max_drawdown_pct);
+  const lossAbs  = Math.abs(Math.min(risk.daily_pnl, 0));
+  const lossPct  = utilPct(lossAbs, risk.max_daily_loss_usd);
+  const isBreach = ddPct >= 100 || lossPct >= 100;
 
   return (
-    <div className="card">
-      <div style={{ fontWeight: 600, marginBottom: 10 }}>{strategyId} — Risk Monitor</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
-        <Stat label="Equity" value={`$${risk.equity.toLocaleString()}`} />
+    <div className={`card${isBreach ? ' risk-breach-border' : ''}`}>
+      <div className="panel-title mb-10">{strategyId} — Risk Monitor</div>
+
+      <div className="risk-stats">
+        <Stat label="Equity"      value={`$${risk.equity.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} />
         <Stat
           label="Daily PnL"
           value={`${risk.daily_pnl >= 0 ? '+' : ''}$${risk.daily_pnl.toFixed(0)}`}
-          color={risk.daily_pnl >= 0 ? 'var(--color-green)' : 'var(--color-red)'}
+          colorClass={risk.daily_pnl >= 0 ? 'badge-green' : 'badge-red'}
         />
         <Stat
           label="Drawdown"
           value={`${risk.drawdown_pct.toFixed(2)}% / ${risk.max_drawdown_pct}%`}
-          color={ddColor}
+          colorClass={barTextClass(ddPct)}
         />
-        <Stat label="Peak Equity" value={`$${risk.peak_equity.toLocaleString()}`} />
+        <Stat label="Peak Equity" value={`$${risk.peak_equity.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} />
       </div>
-      {/* Drawdown progress bar */}
-      <div style={{ marginTop: 10 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--color-muted)', marginBottom: 3 }}>
-          <span>Drawdown utilisation</span>
-          <span>{((risk.drawdown_pct / risk.max_drawdown_pct) * 100).toFixed(1)}%</span>
-        </div>
-        <div style={{ height: 6, background: '#21262d', borderRadius: 3, overflow: 'hidden' }}>
-          <div
-            style={{
-              height: '100%',
-              width: `${Math.min((risk.drawdown_pct / risk.max_drawdown_pct) * 100, 100)}%`,
-              background: ddColor,
-              borderRadius: 3,
-              transition: 'width 0.3s ease',
-            }}
-          />
-        </div>
+
+      <div className="risk-bar-section">
+        <Bar
+          label="Drawdown utilisation"
+          pct={ddPct}
+          detail={`${ddPct.toFixed(1)}% of ${risk.max_drawdown_pct}% limit`}
+        />
+        <Bar
+          label="Daily loss utilisation"
+          pct={lossPct}
+          detail={`$${lossAbs.toFixed(0)} of $${risk.max_daily_loss_usd.toLocaleString()} limit`}
+        />
       </div>
     </div>
   );
