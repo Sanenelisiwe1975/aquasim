@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,14 +10,24 @@ from api.dependencies import get_db
 router = APIRouter(prefix="/trades", tags=["trades"])
 
 
+def _parse_ts(value: Optional[str], param: str) -> Optional[datetime]:
+    """Parse an ISO-8601 timestamp query parameter, raising 422 on bad input."""
+    if value is None:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"Invalid {param}: {value!r}")
+
+
 @router.get("/")
 async def list_trades(
-    strategy_id: Optional[str]  = Query(None),
-    symbol:      Optional[str]  = Query(None),
-    from_ts:     Optional[str]  = Query(None, description="ISO-8601 start timestamp (inclusive)"),
-    to_ts:       Optional[str]  = Query(None, description="ISO-8601 end timestamp (inclusive)"),
-    limit:       int            = Query(100, le=1000),
-    db:          AsyncSession   = Depends(get_db),
+    strategy_id: Optional[str] = Query(None),
+    symbol:      Optional[str] = Query(None),
+    from_ts:     Optional[str] = Query(None, description="ISO-8601 start timestamp (inclusive)"),
+    to_ts:       Optional[str] = Query(None, description="ISO-8601 end timestamp (inclusive)"),
+    limit:       int           = Query(100, le=1000),
+    db:          AsyncSession  = Depends(get_db),
 ):
     from engine.db.models import TradeRecord
 
@@ -26,19 +36,12 @@ async def list_trades(
         stmt = stmt.where(TradeRecord.strategy_id == strategy_id)
     if symbol:
         stmt = stmt.where(TradeRecord.symbol == symbol.upper())
-    if from_ts:
-        try:
-            stmt = stmt.where(TradeRecord.timestamp >= datetime.fromisoformat(from_ts))
-        except ValueError:
-            raise HTTPException(status_code=422, detail=f"Invalid from_ts: {from_ts!r}")
-    if to_ts:
-        try:
-            stmt = stmt.where(TradeRecord.timestamp <= datetime.fromisoformat(to_ts))
-        except ValueError:
-            raise HTTPException(status_code=422, detail=f"Invalid to_ts: {to_ts!r}")
+    if dt := _parse_ts(from_ts, "from_ts"):
+        stmt = stmt.where(TradeRecord.timestamp >= dt)
+    if dt := _parse_ts(to_ts, "to_ts"):
+        stmt = stmt.where(TradeRecord.timestamp <= dt)
 
-    result = await db.execute(stmt)
-    rows   = result.scalars().all()
+    rows = (await db.execute(stmt)).scalars().all()
     return [
         {
             "id":          r.id,
@@ -66,46 +69,42 @@ async def trade_stats(
 ):
     from engine.db.models import TradeRecord
 
-    base = select(TradeRecord).where(TradeRecord.strategy_id == strategy_id)
-    if from_ts:
-        try:
-            base = base.where(TradeRecord.timestamp >= datetime.fromisoformat(from_ts))
-        except ValueError:
-            raise HTTPException(status_code=422, detail=f"Invalid from_ts: {from_ts!r}")
-    if to_ts:
-        try:
-            base = base.where(TradeRecord.timestamp <= datetime.fromisoformat(to_ts))
-        except ValueError:
-            raise HTTPException(status_code=422, detail=f"Invalid to_ts: {to_ts!r}")
+    dt_from = _parse_ts(from_ts, "from_ts")
+    dt_to   = _parse_ts(to_ts,   "to_ts")
+
+    def _apply_filters(stmt):
+        stmt = stmt.where(TradeRecord.strategy_id == strategy_id)
+        if dt_from:
+            stmt = stmt.where(TradeRecord.timestamp >= dt_from)
+        if dt_to:
+            stmt = stmt.where(TradeRecord.timestamp <= dt_to)
+        return stmt
 
     # Overall aggregates
-    agg_stmt = select(
-        func.count(TradeRecord.id).label("total"),
-        func.sum(TradeRecord.notional).label("total_notional"),
-        func.avg(TradeRecord.latency_us).label("avg_latency_us"),
-        func.avg(TradeRecord.slippage).label("avg_slippage"),
-    ).where(TradeRecord.strategy_id == strategy_id)
-    if from_ts:
-        agg_stmt = agg_stmt.where(TradeRecord.timestamp >= datetime.fromisoformat(from_ts))
-    if to_ts:
-        agg_stmt = agg_stmt.where(TradeRecord.timestamp <= datetime.fromisoformat(to_ts))
-
+    agg_stmt = _apply_filters(
+        select(
+            func.count(TradeRecord.id).label("total"),
+            func.sum(TradeRecord.notional).label("total_notional"),
+            func.avg(TradeRecord.latency_us).label("avg_latency_us"),
+            func.avg(TradeRecord.slippage).label("avg_slippage"),
+        )
+    )
     agg_row = (await db.execute(agg_stmt)).one()
 
-    # Per-symbol breakdown — aggregate in Python to avoid dialect-specific CAST quirks
-    all_rows_result = await db.execute(
-        select(TradeRecord.symbol, TradeRecord.side, TradeRecord.notional)
-        .where(TradeRecord.strategy_id == strategy_id)
-        .where(*(
-            ([TradeRecord.timestamp >= datetime.fromisoformat(from_ts)] if from_ts else []) +
-            ([TradeRecord.timestamp <= datetime.fromisoformat(to_ts)]   if to_ts   else [])
-        ) or [True])
-    )
-    all_rows = all_rows_result.all()
+    # Per-symbol breakdown (aggregated in Python to stay dialect-agnostic)
+    detail_rows = (
+        await db.execute(
+            _apply_filters(
+                select(TradeRecord.symbol, TradeRecord.side, TradeRecord.notional)
+            )
+        )
+    ).all()
 
     by_symbol: dict = {}
-    for symbol, side, notional in all_rows:
-        s = by_symbol.setdefault(symbol, {"trades": 0, "notional": 0.0, "buy_count": 0, "sell_count": 0})
+    for symbol, side, notional in detail_rows:
+        s = by_symbol.setdefault(
+            symbol, {"trades": 0, "notional": 0.0, "buy_count": 0, "sell_count": 0}
+        )
         s["trades"]   += 1
         s["notional"] += notional or 0.0
         if side == "BUY":
