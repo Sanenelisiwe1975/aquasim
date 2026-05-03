@@ -50,6 +50,7 @@ export interface Trade {
   notional: number;
   latency_us: number;
   slippage: number;
+  realized_pnl: number;
   timestamp: string;
   _channel?: string;
 }

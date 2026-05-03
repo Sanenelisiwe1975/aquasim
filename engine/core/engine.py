@@ -10,10 +10,12 @@ Orchestrates all components:
 """
 from __future__ import annotations
 import asyncio
+import json
 import uuid
 from datetime import datetime
 from typing import Dict, List, Optional
 
+import aioredis
 import structlog
 
 from engine.backtest import compute_backtest_metrics
@@ -153,9 +155,6 @@ class AquaSimEngine:
 
     async def _listen_commands(self) -> None:
         """Subscribe to engine_commands Redis channel published by the API."""
-        import json
-        import aioredis
-
         redis = await aioredis.from_url(
             settings.redis_url, encoding="utf-8", decode_responses=True
         )
@@ -176,7 +175,6 @@ class AquaSimEngine:
             await redis.close()
 
     async def _dispatch_command(self, command: dict) -> None:
-        import json
         cmd_type = command.get("type")
 
         if cmd_type == "submit_order":

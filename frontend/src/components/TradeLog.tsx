@@ -36,7 +36,7 @@ export const TradeLog: React.FC<Props> = ({ trades }) => {
         <table className="trade-table">
           <thead className="sticky-thead">
             <tr>
-              {['Time', 'Strategy', 'Symbol', 'Side', 'Qty', 'Price', 'Latency', 'Slippage'].map((h) => (
+              {['Time', 'Strategy', 'Symbol', 'Side', 'Qty', 'Price', 'PnL', 'Latency', 'Slippage'].map((h) => (
                 <th key={h}>{h}</th>
               ))}
             </tr>
@@ -50,6 +50,9 @@ export const TradeLog: React.FC<Props> = ({ trades }) => {
                 <td className={`text-right fw-600 ${t.side === 'BUY' ? 'badge-green' : 'badge-red'}`}>{t.side}</td>
                 <td className="mono text-right">{t.quantity}</td>
                 <td className="mono text-right">${t.price.toFixed(4)}</td>
+                <td className={`mono text-right ${t.realized_pnl > 0 ? 'badge-green' : t.realized_pnl < 0 ? 'badge-red' : 'badge-muted'}`}>
+                  {t.realized_pnl !== 0 ? `${t.realized_pnl > 0 ? '+' : ''}$${t.realized_pnl.toFixed(2)}` : '—'}
+                </td>
                 <td className="mono text-right badge-yellow">{t.latency_us}µs</td>
                 <td className="mono text-right badge-muted">{t.slippage.toFixed(6)}</td>
               </tr>
