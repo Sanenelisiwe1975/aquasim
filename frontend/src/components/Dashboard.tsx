@@ -123,6 +123,11 @@ export const Dashboard: React.FC = () => {
       setTicks((prev) => ({ ...prev, [sym]: [tick, ...(prev[sym] ?? [])].slice(0, MAX_TICKS) }));
     }
 
+    if (ch?.startsWith('risk:')) {
+      const sid = ch.split(':')[1];
+      setRisk((prev) => ({ ...prev, [sid]: msg as unknown as RiskSummary }));
+    }
+
     if (ch === 'risk_events') {
       const type   = (msg as Record<string, unknown>).type as string ?? 'risk_event';
       const reason = (msg as Record<string, unknown>).reason as string ?? '';
