@@ -52,22 +52,20 @@ class MeanReversionStrategy(BaseStrategy):
         current_pos = self._position[tick.symbol]
 
         if mid > upper and current_pos >= 0:
-            # Overbought — sell/short
-            if current_pos > 0:
-                await self.sell(tick.symbol, self.trade_qty)
-            await self.sell(tick.symbol, self.trade_qty)
+            # Overbought — sell/short (double qty if reversing from long to net-short in one order)
+            qty = self.trade_qty * (2 if current_pos > 0 else 1)
+            await self.sell(tick.symbol, qty)
             self._position[tick.symbol] = -1.0
             self.log.info("mean_rev_signal", signal="SELL", symbol=tick.symbol,
-                          mid=round(mid, 4), upper=round(upper, 4))
+                          qty=qty, mid=round(mid, 4), upper=round(upper, 4))
 
         elif mid < lower and current_pos <= 0:
-            # Oversold — buy/long
-            if current_pos < 0:
-                await self.buy(tick.symbol, self.trade_qty)
-            await self.buy(tick.symbol, self.trade_qty)
+            # Oversold — buy/long (double qty if reversing from short to net-long in one order)
+            qty = self.trade_qty * (2 if current_pos < 0 else 1)
+            await self.buy(tick.symbol, qty)
             self._position[tick.symbol] = 1.0
             self.log.info("mean_rev_signal", signal="BUY", symbol=tick.symbol,
-                          mid=round(mid, 4), lower=round(lower, 4))
+                          qty=qty, mid=round(mid, 4), lower=round(lower, 4))
 
         elif lower <= mid <= upper and current_pos != 0:
             # Reverted to mean — flatten
