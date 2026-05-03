@@ -32,6 +32,19 @@ class RiskManager:
         self._peak_equity[strategy_id] = self._initial_equity
         self._daily_pnl[strategy_id] = 0.0
 
+    def restore_state(self, strategy_id: str, saved: dict) -> None:
+        """Rehydrate peak_equity and daily_pnl from a persisted risk summary."""
+        if strategy_id not in self._peak_equity:
+            self.register_strategy(strategy_id)
+        self._peak_equity[strategy_id] = float(saved.get("peak_equity", self._initial_equity))
+        self._daily_pnl[strategy_id] = float(saved.get("daily_pnl", 0.0))
+        log.info(
+            "risk_state_restored",
+            strategy_id=strategy_id,
+            peak_equity=self._peak_equity[strategy_id],
+            daily_pnl=self._daily_pnl[strategy_id],
+        )
+
     def update_position(self, strategy_id: str, position: Position) -> None:
         if strategy_id not in self._positions:
             self.register_strategy(strategy_id)
