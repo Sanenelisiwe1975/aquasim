@@ -23,6 +23,7 @@ class TradeRecord(Base):
     notional = Column(Float, nullable=False)
     latency_us = Column(Integer, nullable=False)
     slippage = Column(Float, nullable=False)
+    realized_pnl = Column(Float, nullable=False, default=0.0)
     timestamp = Column(DateTime, nullable=False, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
