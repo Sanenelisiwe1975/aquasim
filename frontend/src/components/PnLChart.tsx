@@ -1,7 +1,7 @@
 import React from 'react';
 import {
-  AreaChart, Area, Line, LineChart, ComposedChart,
-  XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Legend,
+  Area, Line, ComposedChart,
+  XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import { EquityPoint } from '../types';
 
