@@ -371,10 +371,19 @@ class AquaSimEngine:
             if strategy:
                 await strategy.on_fill(order)
 
-        # Update PnL
+        # Capture pre-fill realized PnL so we can compute the delta for this trade
+        pre_pos = self._pnl.get_or_create(trade.strategy_id, trade.symbol)
+        prev_realized = pre_pos.realized_pnl
+
         pos = self._pnl.on_trade(trade)
+        trade_pnl = round(pos.realized_pnl - prev_realized, 4)
+
+        # Attach per-trade PnL to the trade record before persisting
+        trade.realized_pnl = trade_pnl
+
         self._risk.update_position(trade.strategy_id, pos)
-        self._risk.record_trade_pnl(trade.strategy_id, pos.realized_pnl)
+        # Pass the DELTA, not the cumulative total (bug fix: was pos.realized_pnl)
+        self._risk.record_trade_pnl(trade.strategy_id, trade_pnl)
 
         # Persist to Postgres and sync to Redis
         # _persist_order upserts the order record with FILLED status + fill details
@@ -425,6 +434,7 @@ class AquaSimEngine:
                     notional=trade.notional,
                     latency_us=trade.latency_us,
                     slippage=trade.slippage,
+                    realized_pnl=trade.realized_pnl,
                     timestamp=trade.timestamp,
                 )
                 session.add(record)
