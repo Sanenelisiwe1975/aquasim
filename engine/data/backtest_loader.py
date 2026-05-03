@@ -75,7 +75,8 @@ class BacktestLoader:
 
             book = self._books.get(tick.symbol)
             if book:
-                book.update_from_tick(tick.bid, tick.ask, tick.bid_size, tick.ask_size, tick.price)
+                book.update_from_tick(tick.bid, tick.ask, tick.bid_size, tick.ask_size,
+                                     tick.price, timestamp=tick.timestamp)
                 await self._redis.set_orderbook(tick.symbol, book.to_redis_payload())
                 await self._redis.push_tick(tick.symbol, tick_dict)
                 # Publish to Redis pub/sub for live WebSocket streaming

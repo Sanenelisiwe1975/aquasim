@@ -113,7 +113,8 @@ class MarketDataSimulator:
         if book:
             extra_levels = self._build_book_levels(tick.symbol, tick.bid, tick.ask)
             book.update_from_tick(
-                tick.bid, tick.ask, tick.bid_size, tick.ask_size, tick.price, extra_levels
+                tick.bid, tick.ask, tick.bid_size, tick.ask_size, tick.price,
+                extra_levels, timestamp=tick.timestamp,
             )
             book_payload = book.to_redis_payload()
 

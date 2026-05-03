@@ -33,8 +33,13 @@ class OrderBook:
         ask_size: float,
         price: float,
         extra_levels: Optional[List[Tuple[float, float, str]]] = None,
+        timestamp: Optional[datetime] = None,
     ) -> None:
-        """Apply a top-of-book tick and optional synthetic deeper levels."""
+        """Apply a top-of-book tick and optional synthetic deeper levels.
+
+        Pass `timestamp` from the tick to keep `updated_at` accurate in
+        backtest mode (where ticks have historical timestamps, not wall-clock).
+        """
         self._bids[bid] = bid_size
         self._asks[ask] = ask_size
         self.last_trade_price = price
@@ -48,7 +53,7 @@ class OrderBook:
 
         self._trim()
         self.sequence += 1
-        self.updated_at = datetime.utcnow()
+        self.updated_at = timestamp if timestamp is not None else datetime.utcnow()
 
     def apply_snapshot(self, bids: List[Tuple[float, float]], asks: List[Tuple[float, float]]) -> None:
         self._bids = {p: s for p, s in bids}
